@@ -1,0 +1,674 @@
+rm(list = ls())
+
+library(utils)
+library(xts)
+library(openxlsx)
+# install.packages("vars")
+library(vars)
+library(forecast)
+require(eurostat)
+require(zoo)
+
+dane <- read.xlsx("Gotowe_dane_do_dzialan.xlsx", detectDates = T)
+
+dane <- xts(dane[,-1],as.Date(dane[,1]))
+
+nazwy <- c("Inflacja.bazowa", "Ceny.żywności.NP", "FAO", "PPI_ENERGIA")
+
+dane <- dane[, nazwy]
+
+summary(ur.df(dane$Inflacja.bazowa, type="trend", lags=1))
+summary(ur.df(diff(dane$Inflacja.bazowa)[-1], lags=1, type="drift"))
+
+library(vars)
+options(digits=3)
+wyb_VARa <- VARselect(y = dane, lag.max = 12, type = "const")
+wyb_VARa$selection[1]
+var.pt <- VAR(dane, p=wyb_VARa$selection[1], type="const")
+
+Bcoef(var.pt)
+
+summary(var.pt)
+
+# Przyczynowosc
+######################
+causality(var.pt, cause = nazwy[1])
+
+causality(var.pt, cause = nazwy[2])
+
+causality(var.pt, cause = nazwy[3])
+
+causality(var.pt, cause = nazwy[4])
+
+
+
+
+
+
+
+
+
+
+
+
+# Stabilnosc
+
+
+temp  <- stability(var.pt, type="Rec-CUSUM")
+X11(); plot(temp)
+
+
+
+
+
+
+# Theta
+
+
+(Theta <- Phi(var.pt, nstep = 100))
+
+X11(); plot(Theta, main = "Theta (100 kroków)")
+
+# IRF
+
+
+
+wyn_irf <- irf(var.pt, impulse = nazwy[1], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[1])
+wyn_irf <- irf(var.pt, impulse = nazwy[2], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[2])
+wyn_irf <- irf(var.pt, impulse = nazwy[3], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[3])
+wyn_irf <- irf(var.pt, impulse = nazwy[4], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[4])
+
+
+
+
+
+
+
+
+
+
+
+serial.test(var.pt, lags.pt = 12, type = "PT.adjusted")
+
+
+
+
+
+normality.test(var.pt)
+
+
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(var.pt, impulse=nazwy[1], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$Inflacja.bazowa)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[,2:4] / IRF.NEER[,1]
+colnames(PT) <- nazwy[2:4]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na inflację bazową", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=2:4)
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(var.pt, impulse=nazwy[2], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$Ceny.żywności.NP)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[, c(1, 3, 4)] / IRF.NEER[,2]
+colnames(PT) <- nazwy[c(1, 3, 4)]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na ceny żywności NP", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=c(1, 3, 4))
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(var.pt, impulse=nazwy[3], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$FAO)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[, c(1, 2, 4)] / IRF.NEER[, 3]
+colnames(PT) <- nazwy[c(1, 2, 4)]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na FAO", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=c(1, 2, 4))
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(var.pt, impulse=nazwy[4], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$PPI_ENERGIA)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[, 1:3] / IRF.NEER[, 4]
+colnames(PT) <- nazwy[1:3]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na PPI_ENERGIA", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=1:3)
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(var.pt, n.ahead=61) 
+
+X11(); plot(FEVD.PT)
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[1]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(var.pt, n.ahead=61) 
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[2]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(var.pt, n.ahead=61) 
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[3]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(var.pt, n.ahead=61) 
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[4]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Restrykcje SVAR: ograniczenia musza byc na odwrot!!!
+##############################
+bmat <- matrix(0,4,4)
+bmat[upper.tri(bmat, diag=T)] <- NA
+svar.pt <- SVAR(x = var.pt, Amat = NULL, Bmat = bmat)
+svar.pt
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Theta
+
+
+(Theta <- Phi(svar.pt, nstep = 100))
+
+X11(); plot(Theta, main = "Theta (100 kroków)")
+
+# IRF
+
+
+
+wyn_irf <- irf(svar.pt, impulse = nazwy[1], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[1])
+wyn_irf <- irf(svar.pt, impulse = nazwy[2], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[2])
+wyn_irf <- irf(svar.pt, impulse = nazwy[3], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[3])
+wyn_irf <- irf(svar.pt, impulse = nazwy[4], n.ahead = 60)
+X11(); plot(wyn_irf, main = nazwy[4])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(svar.pt, impulse=nazwy[1], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$Inflacja.bazowa)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[,2:4] / IRF.NEER[,1]
+colnames(PT) <- nazwy[2:4]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na inflację bazową", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=2:4)
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(svar.pt, impulse=nazwy[2], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$Ceny.żywności.NP)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[, c(1, 3, 4)] / IRF.NEER[, 2]
+colnames(PT) <- nazwy[c(1, 3, 4)]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na ceny żywności NP", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=c(1, 3, 4))
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(svar.pt, impulse=nazwy[3], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$FAO)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[, c(1, 2, 4)] / IRF.NEER[, 3]
+colnames(PT) <- nazwy[c(1, 2, 4)]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na FAO", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=c(1, 2, 4))
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#IRF
+##############################
+IRF.NEER <- irf(svar.pt, impulse=nazwy[4], response=nazwy[1:4], n.ahead=60, cum = T, boot = F)
+IRF.NEER <- as.matrix(IRF.NEER$irf$PPI_ENERGIA)
+colnames(IRF.NEER) <- nazwy[1:4]
+rownames(IRF.NEER) <- paste('k=',0:60,sep="")
+IRF.NEER[c(1:5, 11, 21, 41, 61), ]
+
+
+
+
+# Pass-through
+#######################################
+
+options(digits=2)
+PT  <- IRF.NEER[, 1:3] / IRF.NEER[, 4]
+colnames(PT) <- nazwy[1:3]
+rownames(PT) <- paste('PT',0:60,sep="")
+PT[c(1:5,11,21,41,61),]
+
+X11()
+par(mfrow=c(1,2), cex = 0.7, bty="n", pin=c(1.9,2))
+plot(as.ts(IRF.NEER), main="reakcja na PPI_ENERGIA", plot.type="single", ylab="", xlab="miesiace", lty=1:4)
+plot(as.ts(PT), main="wspólczynnik PT", plot.type="single", ylab="", xlab="miesiace", lty=1:3)
+legend("topright",nazwy, lty=1:4, bty="n")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(svar.pt, n.ahead=61) 
+
+X11(); plot(FEVD.PT)
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[1]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(svar.pt, n.ahead=61) 
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[2]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(svar.pt, n.ahead=61) 
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[3]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
+# FEVD
+########################################################
+FEVD.PT <- fevd(svar.pt, n.ahead=61) 
+
+#plot(FEVD.PT, names=c("dNEER","dPM","dPPI","dCPI"), nc=2, cex.main=1, ylab="", xlab="")
+FEVD.dCPI <- FEVD.PT[[nazwy[4]]]
+rownames(FEVD.dCPI) <- paste('FEVD, k=',0:60,sep="")
+options(digits=3)
+FEVD.dCPI[c(1:5,11,21,61),]
+
+
+
+
+
+
+
+
+
+
+
+
