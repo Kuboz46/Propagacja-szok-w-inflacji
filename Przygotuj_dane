@@ -1,0 +1,34 @@
+library(openxlsx)
+
+source("Odsezonuj_dane.R") # Odsezonowanie wykorzystujące paczkę RJDemetra wymagającą Java.
+
+przygotuj_dane <- function(sciezka)
+{
+  dane <- read.xlsx(sciezka)
+  
+  dane[, 1] <- as.Date(dane[, 1], origin = "1899-12-30")
+  
+  for(j in 2:ncol(dane))
+  {
+    if(sum(is.na(dane[, j])) > 0)
+    {
+      wyn_spline <- spline(as.double(dane[, j]), n = nrow(dane))
+      for(i in which(is.na(dane[, j])))
+      {
+        dane[i, j] <- wyn_spline$y[i]
+      }
+    }
+  }
+  
+  przygotowane_dane <- odsezonuj_dane(dane)
+  
+  for(i in 2:ncol(dane))
+  {
+    przygotowane_dane[, i] <- as.double(przygotowane_dane[, i])
+    przygotowane_dane[2:nrow(przygotowane_dane), i] <- diff(log(przygotowane_dane[, i]))
+  }
+  
+  przygotowane_dane <- przygotowane_dane[-1, ]
+  
+  return(przygotowane_dane)
+}
