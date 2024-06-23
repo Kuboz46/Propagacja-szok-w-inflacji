@@ -1,0 +1,1203 @@
+rm(list = ls())
+
+library(openxlsx)
+library(xts)
+library(lubridate)
+library(shinyjs)
+library(ggplot2)
+library(gtools)
+library(shinyWidgets)
+library(vars)
+library(reshape2)
+require(gridExtra)
+library(cowplot)
+
+setwd("W:/Osobiste/Kuba_Z/Propagacja szoków w inflacji/W Shiny")
+source("Przygotuj_dane.R")
+source("Funkcja_VARhd.R")
+
+surowe_dane <- read.xlsx("Indeksy_2015_100.xlsx")
+
+# Grupowanie zmiennych do wstawienia do modelu VAR/SVAR
+
+lista_wybor_zmiennych_do_modelu <- list()
+
+lista_wybor_zmiennych_do_modelu[[1]] <- names(surowe_dane)[2:12]
+names(lista_wybor_zmiennych_do_modelu)[1] <- "Dane cenowe"
+
+lista_wybor_zmiennych_do_modelu[[2]] <- names(surowe_dane)[13:42]
+names(lista_wybor_zmiennych_do_modelu)[2] <- "Dane z produkcji sprzedanej przemysłu"
+
+lista_wybor_zmiennych_do_modelu[[3]] <- names(surowe_dane)[43:88]
+names(lista_wybor_zmiennych_do_modelu)[3] <- "Dane o zatrudnieniu"
+
+lista_wybor_zmiennych_do_modelu[[4]] <- names(surowe_dane)[89:134]
+names(lista_wybor_zmiennych_do_modelu)[4] <- "Dane o wynagrodzeniu"
+
+
+
+
+
+
+
+
+
+surowe_dane_kwartalne <- read.xlsx("Dane_do_Eurostatu.xlsx")
+
+
+
+
+lista_wybor_zmiennych_do_modelu_dane_kwartalne <- list()
+
+tabela_nazwy <- c("B1G", "B1GQ", "D21X31", "P3", "P31_S13", "P31_S14", "P31_S14_S15", "P31_S15", "P32_S13", "P3_S13", "P41", "P51G", "P5G", "P6", "P61",
+                  "P62", "P7", "P71", "P72", "P3_P5", "P3_P6")
+
+tabela_definicje <- c("Wartość dodana brutto (Value added, gross)", "Produkt krajowy brutto w cenach rynkowych (Gross domestic product at market prices)", 
+                      "Podatki pomniejszone o dotacje na produkty (Taxes less subsidies on products)", "Wydatki na spożycie ostateczne (Final consumption expenditure)",
+                      "Wydatki na spożycie indywidualne sektora instytucji rządowych i samorządowych (Individual consumption expenditure of general government)", 
+                      "Ostateczne wydatki konsumpcyjne gospodarstw domowych (Final consumption expenditure of households)",
+                      "Wydatki gospodarstw domowych i NPISH na spożycie ostateczne (Household and NPISH final consumption expenditure)", 
+                      "Wydatki na spożycie ostateczne NPISH (Final consumption expenditure of NPISH)", 
+                      "Wydatki na spożycie zbiorowe sektora instytucji rządowych i samorządowych (Collective consumption expenditure of general government)",
+                      "Wydatki na spożycie ostateczne sektora instytucji rządowych i samorządowych (Final consumption expenditure of general government)", 
+                      "Rzeczywiste spożycie indywidualne (Actual individual consumption)", "Nakłady brutto na środki trwałe (Gross fixed capital formation)",
+                      "Tworzenie kapitału brutto (Gross capital formation)", "Eksport towarów i usług (Exports of goods and services)", "Eksport towarów (Exports of goods)", 
+                      "Eksport usług (Exports of services)", "Imports of goods and services (Imports of goods and services)", "Import towarów (Imports of goods)", 
+                      "Import usług (Imports of services)", "Wydatki na spożycie ostateczne i akumulacja brutto (Final consumption expenditure and gross capital formation)", 
+                      "Wydatki na spożycie ostateczne, akumulacja brutto oraz eksport towarów i usług (Final consumption expenditure, gross capital formation and exports of goods and services)"
+)
+
+
+
+lista_wybor_zmiennych_do_modelu_dane_kwartalne[[1]] <- paste0(tabela_nazwy, " - ", tabela_definicje)
+names(lista_wybor_zmiennych_do_modelu_dane_kwartalne)[1] <- "PL_SCA_CLV_I15"
+
+lista_wybor_zmiennych_do_modelu_dane_kwartalne[[2]] <- names(surowe_dane_kwartalne)[23:28]
+names(lista_wybor_zmiennych_do_modelu_dane_kwartalne)[2] <- "Agregaty"
+
+lista_wybor_zmiennych_do_modelu_dane_kwartalne[[3]] <- names(surowe_dane_kwartalne)[29]
+names(lista_wybor_zmiennych_do_modelu_dane_kwartalne)[3] <- "NBP"
+
+
+ui <- shinyUI(pageWithSidebar(
+  useShinyjs(),
+  titlePanel("Propagacja szoków z wykorzystaniem modelu VAR/SVAR"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      
+      
+      selectInput("czestotliwosc_danych", "Na jakich danych chcesz działać?", choices = c("Miesięczne", "Kwartalne"), selected = "Kwartalne"),
+      
+      
+      actionButton("wybierz_czestotliwosc_danych", "Zatwierdź częstotliwość danych"),
+      
+      
+#      fileInput("file1", "Wybierz plik .xlsx do wczytania.",
+#                multiple = TRUE,
+#                accept = c("text/xlsx",
+#                           "text/comma-separated-values,text/plain",
+#                           ".xlsx")),
+      numericInput(inputId = "obs",
+                   label = "Ilość obserwacji surowych danych, jaką chcesz zobaczyć:",
+                   value = 10),
+      
+#      selectInput("rok_poczatkowy", "Wybierz rok począkowy, na którym chcesz budować model", choices = 2000:year(Sys.Date()), selected = 2000),
+      
+
+      
+      h4("Wybierz zmienne w wybranej przez Ciebie kolejności"),
+      
+      hr(),
+      hidden(selectizeInput(
+        inputId = "wybierz_zmienne",
+        label = "Wybierz zmienne do modelu w wybranej przez ciebie kolejności",
+        choices = lista_wybor_zmiennych_do_modelu,
+        multiple = TRUE
+      )),
+
+
+      selectInput("var_czy_svar", "Czy chcesz dopasować model VAR, czy SVAR?", choices = c("VAR", "SVAR")),
+
+      actionButton("dopasuj_model", "Dopasuj model"),
+      
+      
+      
+
+      
+      
+      
+
+
+      
+      
+      
+      
+      h4("Dlaczego kolejność zmiennych jest ważna?"),
+      helpText("Kolejność zmiennych jest kluczowa ze względu na kwestię rekursywnych restrykcji krótkookresowych, zgodnie z którymi szok dla pierwszej zmiennej oddziałuje w momencie wystąpienia tylko na ostatnią zmienną modelu, zaś szok dla ostatniej zmiennej oddziałuje na wszystkie zmienne."),
+      h4("Przykład"),
+      helpText("Mamy zmienne: inflacja bazowa, żywność, FAO, PPI_ENERGIA"),
+      helpText("Przyjmując, że:"),
+      helpText("- inflacja bazowa wpływa tylko na bazową,"),
+      helpText("- żywność wpływa na bazową i żywność,"),
+      helpText("- FAO wpływa na bazową, żywność i FAO,"),
+      helpText("- PPI_ENERGIA wpływa na bazową, żywność, FAO i PPI_ENERGIA,"),
+      helpText("wybieramy kolejność zmiennych:"),
+      helpText("Inflacja bazowa, żywność, FAO, PPI_ENERGIA."),
+      
+
+    
+      
+      
+      hidden(selectizeInput(inputId = "wybierz_trojke",
+                            label = "Wybierz trójkę zmiennych do zbadania zależności między nimi",
+                            choices = lista_wybor_zmiennych_do_modelu,
+                            multiple = TRUE,
+                            options = list(maxItems = 3))),
+      
+      
+
+
+      
+
+      actionButton("wybrana_trojka", "Wybierz trójkę zmiennych"),
+      
+      verbatimTextOutput("Alert_wybrana_trojka"),
+
+      h4("Definicje otrzymywanych wyników są podane w panelu głównym."),
+      
+      h4("Diagnostyka"),
+      
+      helpText("1. Stabilność modelu VAR"),
+      
+      helpText("2. Zbieżność Thet do 0."),
+      
+      h4("Właściwe wyniki"),
+      
+      helpText("1. Funkcja reakcji na impuls (IRF)"),
+      
+      helpText("2. Skumulowany IRF (AIRF)"), 
+      
+      helpText("3. Wartość efektu przenoszenia (PT) dla zmiennych po upływie k okresów."),
+      
+      helpText("4. Dekompozycja wariancji w prognozach (FEVD)"),
+
+      helpText("5. Historyczna dekompozycja wariancji (HD)"),
+      
+      verbatimTextOutput("Alert_dopasuj_model"),
+      
+#      hidden(selectInput("zmienna_wyniki", "Dla której zmiennej chcesz zobaczyć wyniki z dopasowanego modelu?", choices = c())),
+      
+#      hidden(actionButton("zobacz_wyniki", "Zobacz wyniki"))
+    ),
+    
+    mainPanel(
+      h4("Dane wrzucane do modelu (od 1-szej do wybranej ilości obserwacji)"),
+      tableOutput("tabela"),
+      
+      tableOutput("tabela_definicje_zmiennych_kwartalnych"),
+      
+      h4("W wszelkich obliczeniach/wnioskach wzoruję się na książce od dr-a Michała Rubaszka (podrozdział 6.5.: Model pass-through dla Polski)."),
+      
+      h4("AIC"),
+      
+      verbatimTextOutput("AIC_wybrana_trojka"),
+      
+      h4("Zależności między wybraną trójką zmiennych"),
+      
+      verbatimTextOutput("napis_wybrana_trojka"),
+      
+#      h4("Macierz korelacji"),
+#      plotOutput("macierz_korelacji_ta_trojka"),
+      
+      tableOutput("tabela_wybrana_trojka"),
+      
+      verbatimTextOutput("napis_wybrana_trojka_1_G"),
+      verbatimTextOutput("napis_wybrana_trojka_1_I"),
+      
+      verbatimTextOutput("napis_wybrana_trojka_2_G"),
+      verbatimTextOutput("napis_wybrana_trojka_2_I"),
+      
+      verbatimTextOutput("napis_wybrana_trojka_3_G"),
+      verbatimTextOutput("napis_wybrana_trojka_3_I"),
+      
+     
+      
+      h4("Otrzymane wyniki"),
+      
+      
+      
+      
+      tabsetPanel(
+        
+        tabPanel("Wstępna diagnostyka",
+#                 h4("Macierz korelacji"),
+#                 plotOutput("macierz_korelacji"),
+                 
+                 h4("1. Stabilność modelu VAR"),
+                 
+                 h5("Do badania stabilności wykorzystywana jest statystyka oparta na błędach prognozy. Jeżeli dla któregoś okresu błędy wykraczają poza przedział ufności, to odrzucamy hipotezę zerową o stabilności modelu. Procedurę robimy oddzielnie dla każdej zmiennej w modelu i w tabelce przedstawiono, dla których zmiennych warunek stabilności jest spełniony."),
+                 
+                 tableOutput("tabela_stabilnosci"),
+                 
+                 h4("2. Zbieżność Thet modelu VAR do 0"),
+                 h5("Sprawdzam, czy Thety (wyestymowane macierze współczynników reprezentacji średniej ruchomej dla modelu VAR) zbiegają do zera."),
+                 h5("Innymi słowy, dla każdego okresu k, sprawdzam wpływ szoku błędu w momencie t na obserwację y_{t + k} (pochodną obserwacji w momencie t + k po błędzie w momencie t). Jeżeli wpływ zbiega do zera, to oznacza, że model VAR jest stacjonarny."),
+                 plotOutput("wykres_thet"),
+                 
+                 h4("AIC modelu VAR"),
+                 verbatimTextOutput("AIC_modelu_VAR")
+                 ),
+        
+        
+        
+        tabPanel("Wykresy wrzuconych zmiennej do modelu",
+                 h4("Wykresy są do wglądu. Każdą zmienną będącą w postaci indeksu i2015 = 100 odsezonowuję, logarytmuję, a następnie różnicuję. Wynik przemnażam przez 100. Szczegóły wyjaśniające poprawność interpretacji w kolejnych sekcjach są podane w pliku Interpretacja.docx."),
+  #               h4("Wykresy są do wglądu. Każdą zmienną (oprócz stopy procentowej NBP) w postaci indeksu odsezonowuję, logarytmuję, a następnie różnicuję."),
+  #               h4("Stopę NBP inaczej analizuję (do tego wykorzystuję funkcję IRF, badając poziom stopy)."),
+                 plotOutput("wykres_wybranej_zmiennej_do_wynikow")),
+        
+        
+        tabPanel("Wykres IRF",
+                 h4("IRF dla zmiennej x1 jest wpływem zmiennej x1 na pozostałe zmienne, tzn. np., jeśli IRF dla zmiennej x2 (dla k = 6) wynosi 1,5, to oznacza to, że w wyniku wystąpienia szoku zmiennej x1, następuje w 6 miesiącu wzrost zmiennej o 1,5%."),
+                 h4("Jeśli poziom x1 wzrośnie w k = 0 o 1 odchylenie standardowe, to w 8-mym kwartale po szoku x1, poziom x2 wzrośnie o IRF_{x1,x2,8}% (cały czas mamy x1 zwiększony o sigma_x1)"),
+                 plotOutput("wykres_irf")
+                 ),
+        
+        
+        
+        tabPanel("Skumulowany IRF (AIRF)",
+                 h4("Skumulowany wpływ wybranej zmiennej na wszystkie rozpatrywane zmienne, który jest równy wpływowi szoku wybranej zmiennej na poziomy analizowanych zmiennych."),
+                 h4("Przykładowo: Badając skumulowany IRF na szok zmiennej x, dla k = 60, otrzymanie dla x wartości 2,5, dla x1 wartości 1,8, dla x2 wartości 6, oznacza, że w wyniku wystąpienia szoku zmiennej x, po upływie 5 lat, wartość x wzrosła o 2,5%, wartość x1 wzrosła o 1,8%, a wartość x2 o 6%."),
+#                 tableOutput("tabela_airf"),
+                 h4("Jeśli poziom x1 wzrośnie w k = 0 o 1 odchylenie standardowe, to w 8-mym kwartale po szoku x1, poziom x2 łącznie (od początku do 8-go kwartału) wzrośnie o AIRF_{x1,x2,8}% (cały czas mamy x1 zwiększony o sigma_x1)"),
+                 h4("Wykres AIRF"),
+                 plotOutput("wykres_airf")
+        ),
+        
+        
+        
+        tabPanel("Oszacowanie efektu pass through (PT)",
+                 h4("Przykładowo, gdy, licząc efekt pass-through dla zmiennej x, otrzymamy dla k = 60, wartość dla x1 równą 0,6, dla x2 równą 0,4, to trwały wzrost zmiennej x o 10% prowadzi w okresie 5 lat do wzrostu zmiennej x1 o 6%, zmiennej x2 o 4%."),
+ #                tableOutput("tabela_pt"),
+                 h4("Trwały wzrost x1 o 10% prowadzi do wzrostu poziomu x2 po 8 kwartałach o PT_{x1,x2,8}% (cały czas mamy x1 zwiększony o 0,1 * x1 od momentu k = 0)"),
+                 h4("Wykres PT"),
+                 plotOutput("wykres_pt")
+        ),
+        
+        
+
+        
+        tabPanel("Dekompozycja wariancji w prognozach (FEVD)",
+                 h4("Otrzymane wyniki mówią o tym, z czego (w różnych okresach) wynika wariancja prognozy dla tempa wzrostu wybranej zmiennej: x1% wariancji związane jest z 1 zmienną, x2% z 2 zmienną, …, xk% z k-tą zmienną, i x1% + … + xk% = 100%. Dzięki temu, możemy zobaczyć, które szoki są bardziej, a które mniej istotne w objaśnianiu zmienności wybranej zmiennej."),
+                 
+                 tableOutput("tabela_fevd"),
+                 
+                 h4("Wykres dekompozycji wariancji dla wszystkich zmiennych w modelu"),
+                 plotOutput("wykres_fevd")
+        ),
+        
+        
+        
+        tabPanel("Historyczna dekompozycja wariancji dla wszystkich zmiennych w modelu",
+                 h4("Wszystkie szeregi czasowe w VAR można w pełni rozłożyć na wkład różnych szoków. Innymi słowy, jeśli zsumujemy wkład wszystkich wstrząsów w dowolnym momencie t, odzyskamy pierwotny szereg czasowy w czasie t. Dekompozycja historyczna jest kontrfaktycznym podejściem, w którym bada się, jak zmienne ewoluowałyby inaczej, gdyby zamiast tego wystąpiły określone historie wstrząsów."),
+                 
+                 plotOutput("wykres_hd")
+        )
+        
+        
+
+        
+      )
+      
+      
+    )
+  )
+))
+
+
+
+
+
+server <- function(input, output, session)
+{
+  
+#  observeEvent(input$wczytaj_plik, {
+#    req(input$file1)
+#    req(input$obs)    
+    
+    observeEvent(input$wybierz_czestotliwosc_danych,
+    {
+      if(input$czestotliwosc_danych == "Miesięczne")
+      {
+        # dane <- przygotuj_dane(input$file1$datapath) # Na razie zostane przy pliku Indeksy_2015_100.xlsx, bo tu mam rozdzielone nazwy zmiennych na poszczegolne grupy.
+        dane <- read.xlsx("Przygotowane_indeksy_2015_100.xlsx")
+        
+        dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+        
+        dane[, -1] <- dane[, -1] * 100 # Dla dobrej skali
+        
+        
+        
+        
+        # surowe_dane <- read.xlsx(input$file1$datapath)
+        surowe_dane <- read.xlsx("Indeksy_2015_100.xlsx")
+        surowe_dane[, 1] <- as.character(as.Date(surowe_dane[, 1], origin = "1899-12-30"))
+        
+        
+        #    if(year(surowe_dane[1, 1]) < input$rok_poczatkowy)
+        #    {
+        #      idx_poczatek <- min(which(year(surowe_dane[, 1]) == input$rok_poczatkowy))
+        
+        #      surowe_dane <- surowe_dane[idx_poczatek:nrow(surowe_dane), ]
+        #    }
+        
+        output$tabela <- renderTable(head(dane, input$obs))
+        
+        
+        updateSelectizeInput(session, "wybierz_zmienne", choices = lista_wybor_zmiennych_do_modelu)
+        shinyjs::show("wybierz_zmienne")
+        
+        updateSelectizeInput(session, "wybierz_trojke", choices = lista_wybor_zmiennych_do_modelu)
+        shinyjs::show("wybierz_trojke")
+      }
+      
+      
+      
+      
+      if(input$czestotliwosc_danych == "Kwartalne")
+      {
+        # dane <- przygotuj_dane(input$file1$datapath) # Na razie zostane przy pliku Indeksy_2015_100.xlsx, bo tu mam rozdzielone nazwy zmiennych na poszczegolne grupy.
+        dane <- read.xlsx("Przygotowane_dane_do_Eurostatu.xlsx")
+        
+        dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+        
+        dane[, 2:27] <- dane[, 2:27] * 100 # Dla dobrej skali
+        
+        
+        
+        
+        # surowe_dane <- read.xlsx(input$file1$datapath)
+        surowe_dane <- read.xlsx("Dane_do_Eurostatu.xlsx")
+        surowe_dane[, 1] <- as.character(as.Date(surowe_dane[, 1], origin = "1899-12-30"))
+        
+        
+        #    if(year(surowe_dane[1, 1]) < input$rok_poczatkowy)
+        #    {
+        #      idx_poczatek <- min(which(year(surowe_dane[, 1]) == input$rok_poczatkowy))
+        
+        #      surowe_dane <- surowe_dane[idx_poczatek:nrow(surowe_dane), ]
+        #    }
+        
+        output$tabela <- renderTable(head(dane, input$obs))
+        
+        
+        tabela_definicje_zmiennych_kwartalnych <- data.frame(matrix(NA, nrow = 21, ncol = 2))
+        names(tabela_definicje_zmiennych_kwartalnych) <- c("Nazwa", "Definicja")
+        
+        tabela_nazwy <- c("B1G", "B1GQ", "D21X31", "P3", "P31_S13", "P31_S14", "P31_S14_S15", "P31_S15", "P32_S13", "P3_S13", "P41", "P51G", "P5G", "P6", "P61",
+                          "P62", "P7", "P71", "P72", "P3_P5", "P3_P6")
+        
+        tabela_definicje <- c("Wartość dodana brutto (Value added, gross)", "Produkt krajowy brutto w cenach rynkowych (Gross domestic product at market prices)", 
+                              "Podatki pomniejszone o dotacje na produkty (Taxes less subsidies on products)", "Wydatki na spożycie ostateczne (Final consumption expenditure)",
+                              "Wydatki na spożycie indywidualne sektora instytucji rządowych i samorządowych (Individual consumption expenditure of general government)", 
+                              "Ostateczne wydatki konsumpcyjne gospodarstw domowych (Final consumption expenditure of households)",
+                              "Wydatki gospodarstw domowych i NPISH na spożycie ostateczne (Household and NPISH final consumption expenditure)", 
+                              "Wydatki na spożycie ostateczne NPISH (Final consumption expenditure of NPISH)", 
+                              "Wydatki na spożycie zbiorowe sektora instytucji rządowych i samorządowych (Collective consumption expenditure of general government)",
+                              "Wydatki na spożycie ostateczne sektora instytucji rządowych i samorządowych (Final consumption expenditure of general government)", 
+                              "Rzeczywiste spożycie indywidualne (Actual individual consumption)", "Nakłady brutto na środki trwałe (Gross fixed capital formation)",
+                              "Tworzenie kapitału brutto (Gross capital formation)", "Eksport towarów i usług (Exports of goods and services)", "Eksport towarów (Exports of goods)", 
+                              "Eksport usług (Exports of services)", "Imports of goods and services (Imports of goods and services)", "Import towarów (Imports of goods)", 
+                              "Import usług (Imports of services)", "Wydatki na spożycie ostateczne i akumulacja brutto (Final consumption expenditure and gross capital formation)", 
+                              "Wydatki na spożycie ostateczne, akumulacja brutto oraz eksport towarów i usług (Final consumption expenditure, gross capital formation and exports of goods and services)"
+                              )
+        
+        
+        
+        
+        
+        tabela_definicje_zmiennych_kwartalnych[, 1] <- tabela_nazwy
+        tabela_definicje_zmiennych_kwartalnych[, 2] <- tabela_definicje
+        
+        
+        
+        
+        
+        
+        
+        
+        output$tabela_definicje_zmiennych_kwartalnych <- renderTable(tabela_definicje_zmiennych_kwartalnych)
+        
+        updateSelectizeInput(session, "wybierz_zmienne", choices = lista_wybor_zmiennych_do_modelu_dane_kwartalne)
+        shinyjs::show("wybierz_zmienne")
+        
+        updateSelectizeInput(session, "wybierz_trojke", choices = lista_wybor_zmiennych_do_modelu_dane_kwartalne)
+        shinyjs::show("wybierz_trojke")
+      }
+    }
+    )
+  
+  
+    
+    
+  
+    
+    
+    
+    
+#  })
+  
+  
+  
+  observeEvent(input$wybrana_trojka, 
+  {
+    if(is.null(input$wybierz_trojke))
+    {
+      output$Alert_wybrana_trojka <- renderPrint("Najpierw wybierz zmienne!!!")
+    }
+    
+    req(input$wybierz_trojke)
+    
+    napis_input_wybierz_trojke <- input$wybierz_trojke
+    
+    output$napis_wybrana_trojka <- renderPrint(napis_input_wybierz_trojke)
+    
+    ramka_danych_wybrana_trojka <- data.frame(matrix(NA, nrow = 3, ncol = 3))
+    
+    names(ramka_danych_wybrana_trojka) <- c("Zmienna", "Granger", "Jednoczesna")
+    
+    ramka_danych_wybrana_trojka[, 1] <- input$wybierz_trojke
+    
+    idx_trojka <- rep(NA, 3)
+    
+    
+    
+    
+    
+    if(input$czestotliwosc_danych == "Miesięczne")
+    {
+      maksymalne_opoznienie <- 12
+      
+      dane <- read.xlsx("Przygotowane_indeksy_2015_100.xlsx")
+      dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+      dane[, -1] <- dane[, -1] * 100 # Dla dobrej skali
+      for(i in 1:3)
+      {
+        idx_trojka[i] <- which(names(dane) == input$wybierz_trojke[i])
+      }
+      
+      names(dane)[2:12] <- paste0("Dane_cenowe_", 1:11)
+      names(dane)[13:42] <- paste0("PSP_", 1:30)
+      names(dane)[43:88] <- paste0("Zatrudnienie_", 1:46)
+      names(dane)[89:134] <- paste0("Wynagrodzenie_", 1:46)
+    }
+    
+    
+    
+    if(input$czestotliwosc_danych == "Kwartalne")
+    {
+      maksymalne_opoznienie <- 4
+      
+      dane <- read.xlsx("Przygotowane_dane_do_Eurostatu.xlsx")
+      dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+      dane[, 2:27] <- dane[, 2:27] * 100 # Dla dobrej skali
+      names(dane)[2:22] <- paste0(tabela_nazwy, " - ", tabela_definicje)
+      
+      for(i in 1:3)
+      {
+        idx_trojka[i] <- which(names(dane) == input$wybierz_trojke[i])
+      }
+      
+      tabela_nazwy <- c("B1G", "B1GQ", "D21X31", "P3", "P31_S13", "P31_S14", "P31_S14_S15", "P31_S15", "P32_S13", "P3_S13", "P41", "P51G", "P5G", "P6", "P61",
+                        "P62", "P7", "P71", "P72", "P3_P5", "P3_P6")
+
+      names(dane)[2:22] <- tabela_nazwy
+    }
+    
+
+    
+    
+    
+#    if(year(dane[1, 1]) < input$rok_poczatkowy)
+#    {
+#      idx_poczatek <- min(which(year(dane[, 1]) == input$rok_poczatkowy))
+      
+#      dane <- dane[idx_poczatek:nrow(dane), ]
+#    }
+    
+    ta_trojka <- input$wybierz_trojke
+    
+    output$macierz_korelacji_ta_trojka <- renderPlot(corrplot::corrplot(cor(dane[, idx_trojka])))
+    
+    
+    wyb_VARa <- VARselect(y = dane[, idx_trojka], lag.max = maksymalne_opoznienie, type = "const")
+    var.pt <- VAR(dane[, idx_trojka], p=wyb_VARa$selection[1], type="const")
+    
+    output$AIC_wybrana_trojka <- renderPrint(AIC(var.pt))
+    
+    zmienna_napis_wybrana_trojka_1_G <- paste0("Pierwsza zmienna nie ma wpływu na pozostałe zmienne.")
+    zmienna_napis_wybrana_trojka_1_I <- paste0("Nie ma jednoczesnej przyczynowości między pierwszą zmienną a pozostałymi zmiennymi.")
+    
+    zmienna_napis_wybrana_trojka_2_G <- paste0("Druga zmienna nie ma wpływu na pozostałe zmienne.")
+    zmienna_napis_wybrana_trojka_2_I <- paste0("Nie ma jednoczesnej przyczynowości między drugą zmienną a pozostałymi zmiennymi.")
+    
+    zmienna_napis_wybrana_trojka_3_G <- paste0("Trzecia zmienna nie ma wpływu na pozostałe zmienne.")
+    zmienna_napis_wybrana_trojka_3_I <- paste0("Nie ma jednoczesnej przyczynowości między trzecią zmienną a pozostałymi zmiennymi.")
+    
+    
+    
+    przycz_1 <- causality(var.pt, cause = names(dane)[idx_trojka[1]])
+    
+    ramka_danych_wybrana_trojka[1, 2] <- as.double(przycz_1$Granger$p.value)
+    
+    ramka_danych_wybrana_trojka[1, 3] <- as.double(przycz_1$Instant$p.value)
+    
+    if(ramka_danych_wybrana_trojka[1, 2] <= 0.05)
+    {
+      zmienna_napis_wybrana_trojka_1_G <- paste0("Piersza zmienna ma wpływ na pozostałe zmienne.")
+    }
+    
+    
+    if(ramka_danych_wybrana_trojka[1, 3] <= 0.05)
+    {
+      zmienna_napis_wybrana_trojka_1_I <- paste0("Zachodzi jednoczesna przyczynowość między pierwszą zmienną a pozostałymi zmiennymi.")
+    }
+    
+    
+    
+    przycz_2 <- causality(var.pt, cause = names(dane)[idx_trojka[2]])
+    
+    ramka_danych_wybrana_trojka[2, 2] <- as.double(przycz_2$Granger$p.value)
+    ramka_danych_wybrana_trojka[2, 3] <- as.double(przycz_2$Instant$p.value)
+    
+    
+    
+    if(ramka_danych_wybrana_trojka[2, 2] <= 0.05)
+    {
+      zmienna_napis_wybrana_trojka_2_G <- paste0("Druga zmienna ma wpływ na pozostałe zmienne.")
+    }
+    
+    
+    if(ramka_danych_wybrana_trojka[2, 3] <= 0.05)
+    {
+      zmienna_napis_wybrana_trojka_2_I <- paste0("Zachodzi jednoczesna przyczynowość między drugą zmienną a pozostałymi.")
+    }
+    
+    
+    
+    
+    przycz_3 <- causality(var.pt, cause = names(dane)[idx_trojka[3]])
+    
+    ramka_danych_wybrana_trojka[3, 2] <- as.double(przycz_3$Granger$p.value)
+    ramka_danych_wybrana_trojka[3, 3] <- as.double(przycz_3$Instant$p.value)
+    
+    
+    
+    if(ramka_danych_wybrana_trojka[3, 2] <= 0.05)
+    {
+      zmienna_napis_wybrana_trojka_3_G <- paste0("Trzecia zmienna ma wpływ na pozostałe zmienne.")
+    }
+    
+    
+    if(ramka_danych_wybrana_trojka[3, 3] <= 0.05)
+    {
+      zmienna_napis_wybrana_trojka_3_I <- paste0("Zachodzi jednoczesna przyczynowość między trzecią zmienną a pozostałymi zmiennymi.")
+    }
+    
+    
+    
+    
+    
+    output$tabela_wybrana_trojka <- renderTable(ramka_danych_wybrana_trojka)
+    
+    
+    output$napis_wybrana_trojka_1_G <- renderPrint(zmienna_napis_wybrana_trojka_1_G)
+      
+    output$napis_wybrana_trojka_1_I <- renderPrint(zmienna_napis_wybrana_trojka_1_I)
+      
+      
+      
+    output$napis_wybrana_trojka_2_G <- renderPrint(zmienna_napis_wybrana_trojka_2_G)
+      
+    output$napis_wybrana_trojka_2_I <- renderPrint(zmienna_napis_wybrana_trojka_2_I)
+    
+    
+    
+    output$napis_wybrana_trojka_3_G <- renderPrint(zmienna_napis_wybrana_trojka_3_G)
+    
+    output$napis_wybrana_trojka_3_I <- renderPrint(zmienna_napis_wybrana_trojka_3_I)
+    
+    output$Alert_wybrana_trojka <- renderPrint("")
+    
+  })
+  
+  observeEvent(input$dopasuj_model,
+  {
+    if(is.null(input$wybierz_zmienne))
+    {
+      output$Alert_dopasuj_model <- renderPrint("Najpierw wybierz zmienne!!!")
+    }
+    
+    
+    req(input$wybierz_zmienne)
+    req(input$var_czy_svar)
+    
+
+    if(input$czestotliwosc_danych == "Miesięczne")
+    {
+      maksymalna_czestotliwosc <- 12
+      
+      dane <- read.xlsx("Przygotowane_indeksy_2015_100.xlsx")
+      dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+      dane[, -1] <- dane[, -1] * 100 # Dla dobrej skali
+    }
+    
+    if(input$czestotliwosc_danych == "Kwartalne")
+    {
+      maksymalna_czestotliwosc <- 4
+      
+      dane <- read.xlsx("Przygotowane_dane_do_Eurostatu.xlsx")
+      dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+      dane[, 2:27] <- dane[, 2:27] * 100 # Dla dobrej skali
+      
+      names(dane)[2:22] <- paste0(tabela_nazwy, " - ", tabela_definicje)
+    }
+    
+    
+    ilosc_zmiennych <- length(input$wybierz_zmienne)
+    
+    idx_wybrane_zmienne <- rep(NA, ilosc_zmiennych)
+    
+    for(i in 1:ilosc_zmiennych)
+    {
+      idx_wybrane_zmienne[i] <- which(names(dane) == input$wybierz_zmienne[i])
+    }
+    
+    
+    zmienne_z_wynikami_do_wyboru <- names(dane)[idx_wybrane_zmienne]
+    
+    if(input$czestotliwosc_danych == "Miesięczne")
+    {
+      names(dane)[2:12] <- paste0("Dane_cenowe_", 1:11)
+      names(dane)[13:42] <- paste0("PSP_", 1:30)
+      names(dane)[43:88] <- paste0("Zatrudnienie_", 1:46)
+      names(dane)[89:134] <- paste0("Wynagrodzenie_", 1:46)
+    }
+    
+    
+    if(input$czestotliwosc_danych == "Kwartalne")
+    {
+      tabela_nazwy <- c("B1G", "B1GQ", "D21X31", "P3", "P31_S13", "P31_S14", "P31_S14_S15", "P31_S15", "P32_S13", "P3_S13", "P41", "P51G", "P5G", "P6", "P61",
+                        "P62", "P7", "P71", "P72", "P3_P5", "P3_P6")
+      
+      names(dane)[2:22] <- tabela_nazwy
+    }
+    
+  
+    
+#    if(year(dane[1, 1]) < input$rok_poczatkowy)
+#    {
+#      idx_poczatek <- min(which(year(dane[, 1]) == input$rok_poczatkowy))
+      
+#      dane <- dane[idx_poczatek:nrow(dane), ]
+#    }
+    
+    
+    
+    
+    wybrane_zmienne_do_modelu <- names(dane)[idx_wybrane_zmienne]
+
+    output$macierz_korelacji <- renderPlot(corrplot::corrplot(cor(dane[, wybrane_zmienne_do_modelu])))
+    
+    
+    
+    wyb_VARa <- VARselect(y = dane[, wybrane_zmienne_do_modelu], lag.max = maksymalna_czestotliwosc, type = "const")
+    
+    dopasowany_model <- VAR(dane[, wybrane_zmienne_do_modelu], p=wyb_VARa$selection[1], type="const")
+    
+    output$AIC_modelu_VAR <- renderPrint(AIC(dopasowany_model))
+    
+    temp  <- stability(dopasowany_model, type="Rec-CUSUM")
+    
+    moja_tabela_stabilnosci <- data.frame(matrix(NA, nrow = length(input$wybierz_zmienne), ncol = 2))
+    
+    moja_tabela_stabilnosci[, 1] <- input$wybierz_zmienne
+    
+    names(moja_tabela_stabilnosci) <- c("Zmienna", "Stabilność")
+    
+    for(i in 1:length(temp$stability))
+    {
+      moja_tabela_stabilnosci[i, 2] <- "NIE"
+      
+      stabilnosc_proces <- temp$stability[[i]][[1]]
+      
+      wynik_efp <-  efp(stabilnosc_proces ~ 1, type = "Rec-CUSUM")
+      
+      if(all(abs(stabilnosc_proces) < boundary(wynik_efp , alpha = 0.05)) == TRUE)
+      {
+        moja_tabela_stabilnosci[i, 2] <- "TAK"
+      }
+    }
+    
+    
+    
+    
+    
+    output$tabela_stabilnosci <- renderTable(moja_tabela_stabilnosci)
+    
+    
+    
+    Theta <- Phi(dopasowany_model, nstep = 100)
+    
+    output$wykres_thet <- renderPlot({plot(Theta, main = "Theta (100 kroków)")})
+    
+    
+
+    if(input$var_czy_svar == "SVAR")
+    {
+      bmat <- matrix(0, length(input$wybierz_zmienne), length(input$wybierz_zmienne))
+      bmat[upper.tri(bmat, diag=T)] <- NA
+      dopasowany_model <- SVAR(x = dopasowany_model, Amat = NULL, Bmat = bmat)
+    }
+
+#    updateSelectInput(session, "zmienna_wyniki", choices = zmienne_z_wynikami_do_wyboru)
+#    shinyjs::show("zmienna_wyniki")
+    
+#    updateActionButton(session, "zobacz_wyniki")
+#    shinyjs::show("zobacz_wyniki")
+    
+    
+    output$Alert_dopasuj_model <- renderPrint("")
+
+#  })
+  
+  
+  
+#  observeEvent(input$zobacz_wyniki,
+#  {
+    req(input$wybierz_zmienne)
+#    req(input$zmienna_wyniki)
+    
+#    idx_HD_ktora_zmienna_do_wynikow <- which(input$wybierz_zmienne == input$zmienna_wyniki)
+    
+    if(input$czestotliwosc_danych == "Miesięczne")
+    {
+      maksymalna_czestotliwosc <- 12
+      
+      dane <- read.xlsx("Przygotowane_indeksy_2015_100.xlsx")
+      dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+      dane[, -1] <- dane[, -1] * 100 # Dla dobrej skali
+      
+      idx_zmienna_wykres_zmiennej <- rep(NA, length(input$wybierz_zmienne))
+      for(j in 1:length(input$wybierz_zmienne))
+      {
+        idx_zmienna_wykres_zmiennej[j] <- which(names(dane) == input$wybierz_zmienne[j])
+      }
+    }
+    
+
+    
+    
+    
+    
+    if(input$czestotliwosc_danych == "Kwartalne")
+    {
+      maksymalna_czestotliwosc <- 4
+      
+      dane <- read.xlsx("Przygotowane_dane_do_Eurostatu.xlsx")
+      dane[, 1] <- as.character(as.Date(dane[, 1], origin = "1899-12-30"))
+      dane[, 2:27] <- dane[, 2:27] * 100 # Dla dobrej skali
+      
+      
+      
+      
+      names(dane)[2:22] <- paste0(tabela_nazwy, " - ", tabela_definicje)
+      
+      
+      idx_zmienna_wykres_zmiennej <- rep(NA, length(input$wybierz_zmienne))
+      for(j in 1:length(input$wybierz_zmienne))
+      {
+        idx_zmienna_wykres_zmiennej[j] <- which(names(dane) == input$wybierz_zmienne[j])
+      }
+    }
+
+    
+    
+#    if(input$zmienna_wyniki %in% names(dane))
+#    {
+#      idx_zmienna_wyniki <- which(names(dane) == input$zmienna_wyniki)
+      
+      
+      
+      
+      
+
+      
+      output$wykres_wybranej_zmiennej_do_wynikow <- renderPlot({
+        par(mfrow=c(1,length(input$wybierz_zmienne)))
+        for(j in 1:length(input$wybierz_zmienne))
+        {
+          
+          dane_wykres_wybranej_zmiennej_do_wynikow <- dane[, c(1, idx_zmienna_wykres_zmiennej[j])]
+          dane_wykres_wybranej_zmiennej_do_wynikow[, 1] <- 1:nrow(dane_wykres_wybranej_zmiennej_do_wynikow)
+          names(dane_wykres_wybranej_zmiennej_do_wynikow) <- c("x", "y")
+          
+          plot(dane_wykres_wybranej_zmiennej_do_wynikow, col = rgb(0, 101, 177, maxColorValue = 255), main = input$wybierz_zmienne[j], cex.lab=2, cex.axis=2, cex.main=2, cex.sub=2)
+          lines(dane_wykres_wybranej_zmiennej_do_wynikow, col = rgb(0, 101, 177, maxColorValue = 255))
+          
+          # ggplot(dane_wykres_wybranej_zmiennej_do_wynikow, aes(x, y)) + geom_line() + ggtitle(input$wybierz_zmienne[j])
+        }
+        }, height = 1000, width = 3000)
+      
+      
+      ilosc_zmiennych <- length(input$wybierz_zmienne)
+      
+      nazwy_zmiennych_przed_przeksztalceniem <- input$wybierz_zmienne
+      
+      idx_wybrane_zmienne <- rep(NA, ilosc_zmiennych)
+      
+      for(i in 1:ilosc_zmiennych)
+      {
+        idx_wybrane_zmienne[i] <- which(names(dane) == input$wybierz_zmienne[i])
+      }
+      
+      if(input$czestotliwosc_danych == "Miesięczne")
+      {
+        names(dane)[2:12] <- paste0("Dane_cenowe_", 1:11)
+        names(dane)[13:42] <- paste0("PSP_", 1:30)
+        names(dane)[43:88] <- paste0("Zatrudnienie_", 1:46)
+        names(dane)[89:134] <- paste0("Wynagrodzenie_", 1:46)
+      }
+      
+      if(input$czestotliwosc_danych == "Kwartalne")
+      {
+        tabela_nazwy <- c("B1G", "B1GQ", "D21X31", "P3", "P31_S13", "P31_S14", "P31_S14_S15", "P31_S15", "P32_S13", "P3_S13", "P41", "P51G", "P5G", "P6", "P61",
+                          "P62", "P7", "P71", "P72", "P3_P5", "P3_P6")
+        
+        names(dane)[2:22] <- tabela_nazwy
+      }
+      
+      
+      
+      
+      
+#      if(year(dane[1, 1]) < input$rok_poczatkowy)
+#      {
+#        idx_poczatek <- min(which(year(dane[, 1]) == input$rok_poczatkowy))
+        
+#        dane <- dane[idx_poczatek:nrow(dane), ]
+#      }
+      
+      ilosc_zmiennych <- length(input$wybierz_zmienne)
+      
+      wybrane_zmienne_do_modelu <- names(dane)[idx_wybrane_zmienne]
+      
+      wyb_VARa <- VARselect(y = dane[, idx_wybrane_zmienne], lag.max = maksymalna_czestotliwosc, type = "const")
+      
+      assign("wyb_VARa",wyb_VARa, envir = .GlobalEnv)
+      
+      dopasowany_model <- VAR(dane[, idx_wybrane_zmienne], p=wyb_VARa$selection[1], type="const")
+      
+      if(input$var_czy_svar == "SVAR")
+      {
+        bmat <- matrix(0, length(input$wybierz_zmienne), length(input$wybierz_zmienne))
+        bmat[upper.tri(bmat, diag=T)] <- NA
+        
+        assign("bmat",bmat, envir = .GlobalEnv)
+        dopasowany_model <- SVAR(x = dopasowany_model, Amat = NULL, Bmat = bmat)
+      }
+      
+      assign("dopasowany_model",dopasowany_model, envir = .GlobalEnv)
+      
+      
+      
+      
+      
+      
+      
+      output$wykres_irf <- renderPlot({
+        par(mfrow=c(length(input$wybierz_zmienne), length(input$wybierz_zmienne)))
+        
+        
+        for(i in 1:length(input$wybierz_zmienne))
+        {
+          for(j in 1:length(input$wybierz_zmienne))
+          {
+            wyn_irf <- irf(dopasowany_model, impulse = names(dane)[idx_zmienna_wykres_zmiennej[j]], response = names(dane)[idx_zmienna_wykres_zmiennej[i]], n.ahead = 60)
+            
+            # rozklad = rnorm(10)
+            # dane <- data.frame(x = 1:10, y= rozklad, z = rozklad + 1, u = rozklad - 1)
+            # matplot(dane[,2:4],type="l", lwd=2, col=rgb(233, 10, 10, maxColorValue = 255), lty=c(1,2,2))
+            
+            irf_do_galerii <- data.frame(wyn_irf$irf[[1]][, 1], wyn_irf$Lower[[1]][,1], wyn_irf$Upper[[1]][,1])
+                   
+
+            matplot(irf_do_galerii,type="l", lwd=2, col=rgb(233, 10, 10, maxColorValue = 255), ylab = "Szok", main = paste0(names(dane)[idx_zmienna_wykres_zmiennej[j]], " -> ", names(dane)[idx_zmienna_wykres_zmiennej[i]]), lty=c(1,2,2), cex.lab=1.5, cex.axis=1.5, cex.main=2, cex.sub=2)
+            
+          }
+        }
+        
+    
+        
+        }, height = 2000, width = 3000) 
+      
+      
+      
+      
+      
+      
+      
+      
+      
+#      IRF.NEER <- irf(dopasowany_model, impulse=names(dane)[idx_zmienna_wyniki], response=wybrane_zmienne_do_modelu, n.ahead=60, cum = T, boot = F)
+#      IRF.NEER <- as.matrix(IRF.NEER$irf[[names(dane)[idx_zmienna_wyniki]]])
+      
+#      ramka_danych_do_airf <- data.frame(matrix(NA, nrow = nrow(IRF.NEER), ncol = ncol(IRF.NEER) + 1))
+      
+#      colnames(ramka_danych_do_airf) <- c("Okres", wybrane_zmienne_do_modelu)
+      
+#      ramka_danych_do_airf[, 1] <- paste('k = ',0:60,sep="")
+      
+#      ramka_danych_do_airf[, 2:ncol(ramka_danych_do_airf)] <- IRF.NEER
+      
+#      ramka_danych_do_airf <- ramka_danych_do_airf[c(1:5, 11, 21, 41, 61), ]
+      
+      
+#      output$tabela_airf <- renderTable({ramka_danych_do_airf})
+      
+      
+      
+      output$wykres_airf <- renderPlot({
+        
+        par(mfrow=c(length(input$wybierz_zmienne), length(input$wybierz_zmienne)))
+        
+        
+        for(i in 1:length(input$wybierz_zmienne))
+        {
+          for(j in 1:length(input$wybierz_zmienne))
+          {
+            wyn_irf <- irf(dopasowany_model, impulse = names(dane)[idx_zmienna_wykres_zmiennej[j]], response = names(dane)[idx_zmienna_wykres_zmiennej[i]], n.ahead = 60, cumulative = T)
+            
+            # rozklad = rnorm(10)
+            # dane <- data.frame(x = 1:10, y= rozklad, z = rozklad + 1, u = rozklad - 1)
+            # matplot(dane[,2:4],type="l", lwd=2, col=rgb(233, 10, 10, maxColorValue = 255), lty=c(1,2,2))
+            
+            irf_do_galerii <- data.frame(wyn_irf$irf[[1]][, 1], wyn_irf$Lower[[1]][,1], wyn_irf$Upper[[1]][,1])
+            
+            
+            matplot(irf_do_galerii,type="l", lwd=2, col=rgb(233, 10, 10, maxColorValue = 255), ylab = "Skumulowany szok", main = paste0(names(dane)[idx_zmienna_wykres_zmiennej[j]], " -> ", names(dane)[idx_zmienna_wykres_zmiennej[i]]), lty=c(1,2,2), cex.lab=1.5, cex.axis=1.5, cex.main=2, cex.sub=2)
+            
+          }
+        }
+        
+        
+        
+        }, height = 2000, width = 3000) 
+      
+      
+      
+#      assign("IRF.NEER",IRF.NEER, envir = .GlobalEnv)
+      
+      
+      
+      
+#      PT  <- IRF.NEER[, setdiff(wybrane_zmienne_do_modelu, names(dane)[idx_zmienna_wyniki])] / IRF.NEER[, names(dane)[idx_zmienna_wyniki]]
+      
+#      ramka_danych_do_PT <- data.frame(matrix(NA, nrow = nrow(PT), ncol = ncol(PT) + 1))
+      
+#      names(ramka_danych_do_PT) <- c("Okres", setdiff(wybrane_zmienne_do_modelu, names(dane)[idx_zmienna_wyniki]))
+      
+#      ramka_danych_do_PT[, 1] <- paste('PT, k = ',0:60,sep="")
+      
+#      ramka_danych_do_PT[, 2:ncol(ramka_danych_do_PT)] <- PT
+      
+#      ramka_danych_do_PT <- ramka_danych_do_PT[c(1:5,11,21,41,61), ]
+      
+#      output$tabela_pt <- renderTable({ramka_danych_do_PT})
+      
+#      ta_zmienna_do_pt <- which(wybrane_zmienne_do_modelu == names(dane)[idx_zmienna_wyniki])
+      
+      
+      output$wykres_pt <- renderPlot({
+
+        par(mfrow=c(length(input$wybierz_zmienne), length(input$wybierz_zmienne) - 1))
+        
+        for(j in 1:length(input$wybierz_zmienne))
+        {
+          IRF.NEER <- irf(dopasowany_model, impulse=names(dane)[idx_zmienna_wykres_zmiennej[j]], response=wybrane_zmienne_do_modelu, n.ahead=60, cum = T, boot = F)
+          IRF.NEER <- as.matrix(IRF.NEER$irf[[1]])
+          
+          PT_roznica_zbiorow <- setdiff(wybrane_zmienne_do_modelu, names(dane)[idx_zmienna_wykres_zmiennej[j]])
+          
+          for(i in 1:length(PT_roznica_zbiorow))
+          {
+            PT  <- IRF.NEER[, PT_roznica_zbiorow[i]] / IRF.NEER[, names(dane)[idx_zmienna_wykres_zmiennej[j]]]
+            
+            matplot(as.ts(PT), type="l", lwd=2, col=rgb(233, 10, 10, maxColorValue = 255), xlab = "Miesiące", ylab = "PT", main = paste0(names(dane)[idx_zmienna_wykres_zmiennej[j]], " -> ", PT_roznica_zbiorow[i]), lty=c(1,2,2), cex.lab=1.5, cex.axis=1.5, cex.main=2, cex.sub=2)
+ 
+            
+          }
+        }
+        
+
+        }, height = 2000, width = 3000) 
+      
+      
+      FEVD.PT <- fevd(dopasowany_model, n.ahead=61) 
+      
+#      FEVD.dCPI <- FEVD.PT[[names(dane)[idx_zmienna_wyniki]]]
+      
+#      ramka_danych_fevd <- data.frame(matrix(NA, nrow = nrow(FEVD.dCPI), ncol = ncol(FEVD.dCPI) + 1))
+      
+#      names(ramka_danych_fevd) <- c("Okres", colnames(FEVD.dCPI))
+      
+#      ramka_danych_fevd[, 1] <- paste('FEVD, k=',0:60,sep="")
+      
+#      ramka_danych_fevd[, 2:ncol(ramka_danych_fevd)] <- FEVD.dCPI
+      
+#      ramka_danych_fevd <- ramka_danych_fevd[c(1:5,11,21,61), ]
+      
+#      output$tabela_fevd <- renderTable({ramka_danych_fevd})
+      
+      output$wykres_fevd <- renderPlot({
+        wykresy_ggplot_FEVD <- list()
+        
+        
+        
+        
+        for(i in 1:length(input$wybierz_zmienne))
+        {
+          ex <- FEVD.PT[[i]]
+          ex2 <- as.data.frame(ex) # transforming the HD matrix as data frame #
+          colnames(ex2) <- substr(nazwy_zmiennych_przed_przeksztalceniem, 1, 6) # renaming columns #
+          ex2$Period <- 1:nrow(ex2) # creating an id column #
+          col_id <- grep("Period", names(ex2)) # setting the new variable as id #
+          ex3 <- ex2[, c(col_id, (1:ncol(ex2))[-col_id])] # moving id variable to the first column #
+          molten.ex <- melt(ex3, id = "Period") # melting the data frame #
+          
+          nowy_wykres_ggplot <- ggplot(molten.ex, aes(x = Period, y = value, fill = variable)) + 
+            geom_bar(stat = "identity") + 
+            guides(fill = guide_legend(reverse = TRUE)) +
+            theme(text = element_text(size = 20))
+          
+          wykresy_ggplot_FEVD[[i]] <- nowy_wykres_ggplot
+        }
+        
+        
+        
+        plot_grid(plotlist = wykresy_ggplot_FEVD, labels = substr(input$wybierz_zmienne, 1, 6))
+        
+        
+        }, height = 2000, width = 3000) 
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      dopasowany_model <- VAR(dane[, idx_wybrane_zmienne], p=wyb_VARa$selection[1], type="const")
+      
+      
+      assign("dopasowany_model",dopasowany_model, envir = .GlobalEnv)
+      
+      
+      
+ #     HD <- VARhd(Estimation=dopasowany_model)
+      
+ #     assign("HD",HD, envir = .GlobalEnv)
+      
+
+      
+      
+      
+#      ex <- HD[,, idx_HD_ktora_zmienna_do_wynikow]
+#      ex1 <- as.data.frame(ex) # transforming the HD matrix as data frame #
+#      ex2 <- ex1[(wyb_VARa$selection[1] + 1):nrow(ex1),1:length(idx_wybrane_zmienne)] # taking our the first wyb_VARa$selection[1] rows as they are N/As #
+#      colnames(ex2) <- nazwy_zmiennych_przed_przeksztalceniem # renaming columns #
+#      ex2$Period <- 1:nrow(ex2) # creating an id column #
+#      col_id <- grep("Period", names(ex2)) # setting the new variable as id #
+#      ex3 <- ex2[, c(col_id, (1:ncol(ex2))[-col_id])] # moving id variable to the first column #
+#      molten.ex <- melt(ex3, id = "Period") # melting the data frame #
+      
+      
+      
+      
+      output$wykres_hd <- renderPlot({
+        par(mfrow = c(1, length(input$wybierz_zmienne)))
+        
+        wykresy_ggplot_HD <- list()
+        
+        for(i in 1:length(input$wybierz_zmienne))
+        {
+          HD <- VARhd(Estimation=dopasowany_model)
+          
+          assign("HD",HD, envir = .GlobalEnv)
+          
+          ex <- HD[,, i]
+          ex1 <- as.data.frame(ex) # transforming the HD matrix as data frame #
+          ex2 <- ex1[(wyb_VARa$selection[1] + 1):nrow(ex1),1:length(idx_wybrane_zmienne)] # taking our the first wyb_VARa$selection[1] rows as they are N/As #
+          colnames(ex2) <- substr(nazwy_zmiennych_przed_przeksztalceniem, 1, 6) # renaming columns #
+          
+          
+          
+          
+          ex2$Period <- 1:nrow(ex2) # creating an id column #
+          col_id <- grep("Period", names(ex2)) # setting the new variable as id #
+          ex3 <- ex2[, c(col_id, (1:ncol(ex2))[-col_id])] # moving id variable to the first column #
+          molten.ex <- melt(ex3, id = "Period") # melting the data frame #
+          
+          nowy_wykres_ggplot <- ggplot(molten.ex, aes(x = Period, y = value, fill = variable)) + 
+            geom_bar(stat = "identity") + 
+            guides(fill = guide_legend(reverse = TRUE)) + 
+            theme(text = element_text(size = 20))
+          
+          wykresy_ggplot_HD[[i]] <- nowy_wykres_ggplot
+          
+          
+          
+        }
+        
+        
+        
+        plot_grid(plotlist = wykresy_ggplot_HD, labels = substr(input$wybierz_zmienne, 1, 6))
+        
+#        ggplot(molten.ex, aes(x = Period, y = value, fill = variable)) + 
+#          geom_bar(stat = "identity") + 
+#          guides(fill = guide_legend(reverse = TRUE))
+        
+#        rozkladzik = rnorm(1:100, sd = 10)
+#        dane_HD <- data.frame(a = rozkladzik, b = rozkladzik + 10, c = rozkladzik - 10, d = rozkladzik - 20)
+#        matplot(dane_HD,type="l", lwd=2, ylab = "Skumulowany szok", main = "ABC", lty=c(1, 1, 1, 1))
+        
+        
+#        nn <- ncol(dane_HD)
+        
+#        legend("top", colnames(dane_HD),col=seq_len(nn),cex=0.8,fill=seq_len(nn))
+        
+        
+
+        
+        }, height = 2000, width = 3000) 
+#    }
+
+    
+  }
+  
+  
+  )
+  
+  
+}
+
+
+
+
+
+shinyApp(ui, server)
